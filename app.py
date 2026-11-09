@@ -1,89 +1,104 @@
 import streamlit as st
 import pandas as pd
-import pypdf
 import io
-import os
-import zipfile
 
-st.set_page_config(page_title="حصر ملفات PDF وحساب الصفحات السريع", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="VLOOKUP السريع لملفات الإكسيل", page_icon="📊", layout="wide")
 
-st.title("⚡ أداة حصر ملفات PDF السريعة واستخراج البيانات إلى Excel")
-st.write("رفع الفولدر (كـ ZIP) أو الملفات وقراءة الصفحات بسرعة فائقة.")
+# 🎨 تطبيق الخلفية السوداء والنصوص البيضاء
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: #0E1117;
+        color: #FFFFFF;
+    }
+    .stButton>button {
+        background-color: #262730;
+        color: #FFFFFF;
+        border-radius: 8px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("⚡ أداة مطابقة جلب البيانات السريعة (VLOOKUP الفائق)")
+st.write("ربط جلب عدة أعمدة من شيت كبير إلى شيت آخر بسرعة فائقة.")
 
 st.divider()
 
-uploaded_file_or_zip = st.file_uploader(
-    "📁 ارفع الفولدر مضغوطاً (ZIP) لتحديده بنقرة واحدة من الخارج، أو اختر ملفات الـ PDF:", 
-    type=["pdf", "zip"], 
-    accept_multiple_files=True
-)
+col1, col2 = st.columns(2)
 
-if uploaded_file_or_zip:
-    pdf_data = []
-    total_pages = 0
-    file_list = []
+with col1:
+    st.subheader("📥 1. الشيت الأساسي (الملف الصغير)")
+    target_file = st.file_uploader("ارفع الملف المراد إضافة البيانات إليه (Excel/CSV):", type=["xlsx", "xls", "csv"], key="target")
 
-    # معالجة الملفات المرفوعة سواء كانت ZIP أو PDF
-    for item in uploaded_file_or_zip:
-        if item.name.lower().endswith('.zip'):
-            with zipfile.ZipFile(io.BytesIO(item.read()), 'r') as z:
-                for file_info in z.infolist():
-                    if file_info.filename.lower().endswith('.pdf') and not file_info.filename.startswith('__MACOSX'):
-                        file_bytes = z.read(file_info.filename)
-                        clean_name = os.path.basename(file_info.filename)
-                        file_list.append((clean_name, io.BytesIO(file_bytes)))
-        elif item.name.lower().endswith('.pdf'):
-            file_list.append((item.name, io.BytesIO(item.read())))
+with col2:
+    st.subheader("📁 2. شيت المصدر (الملف الكبير)")
+    source_file = st.file_uploader("ارفع الملف الذي يحتوي على البيانات الكلية (Excel/CSV):", type=["xlsx", "xls", "csv"], key="source")
 
-    total_files = len(file_list)
+if target_file and source_file:
+    try:
+        # قراءة الملفات
+        with st.spinner("جاري قراءة البيانات..."):
+            df_target = pd.read_csv(target_file) if target_file.name.endswith('.csv') else pd.read_excel(target_file)
+            df_source = pd.read_csv(source_file) if source_file.name.endswith('.csv') else pd.read_excel(source_file)
 
-    if total_files > 0:
-        st.info(f"📁 تم العثور على {total_files} ملف PDF. جاري الحصر السريع...")
+        st.success("✅ تم تحميل الملفين بنجاح!")
+        st.divider()
+
+        st.subheader("⚙️ إعدادات الربط واستخراج البيانات")
         
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for idx, (filename, file_stream) in enumerate(file_list, start=1):
-            try:
-                pdf_reader = pypdf.PdfReader(file_stream)
-                num_pages = len(pdf_reader.pages)
-                total_pages += num_pages
-                
-                pdf_data.append({
-                    "م": idx,
-                    "اسم الملف (رقم الملف)": filename,
-                    "عدد الصفحات": num_pages
-                })
-            except Exception:
-                pdf_data.append({
-                    "م": idx,
-                    "اسم الملف (رقم الملف)": filename,
-                    "عدد الصفحات": "خطأ في القراءة"
-                })
-            
-            if idx % 5 == 0 or idx == total_files:
-                progress_bar.progress(idx / total_files)
-                status_text.text(f"تمت معالجة {idx} من أصل {total_files} ملف...")
-                
-        status_text.empty()
-        st.success(f"✅ تم الانتهاء بنجاح! إجمالي عدد الصفحات: **{total_pages} صفحة**")
-        
-        df = pd.DataFrame(pdf_data)
-        
-        st.subheader("📋 معاينة بيانات الملفات:")
-        st.dataframe(df, use_container_width=True)
+        cfg_col1, cfg_col2 = st.columns(2)
 
-        # إنشاء شيت Excel للتحميل المباشر
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='حصر الـ PDF')
-        processed_data = output.getvalue()
+        with cfg_col1:
+            target_key = st.selectbox("اختر عمود البحث (الـ Key) في الشيت الأساسي:", df_target.columns)
+        
+        with cfg_col2:
+            source_key = st.selectbox("اختر عمود البحث (الـ Key) في شيت المصدر الكلي:", df_source.columns)
 
-        st.download_button(
-            label="📥 تحميل شيت الإكسيل (Excel)",
-            data=processed_data,
-            file_name="pdf_pages_count.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        # اختيار الأعمدة المراد نقلها من الشيت الكبير
+        available_columns = [col for col in df_source.columns if col != source_key]
+        selected_columns = st.multiselect(
+            "📌 اختر الأعمدة المراد جلبها من شيت المصدر إلى الشيت الأساسي:",
+            options=available_columns,
+            default=available_columns[:1] if available_columns else []
         )
-    else:
-        st.warning("لم يتم العثور على أي ملفات PDF داخل الملف المرفوع.")
+
+        if selected_columns:
+            if st.button("🚀 تنفيذ عملية الدمج والجلب الفوري"):
+                with st.spinner("جاري معالجة وربط البيانات بسرعة..."):
+                    # تجهيز البيانات للدمج الفائق
+                    cols_to_fetch = [source_key] + selected_columns
+                    df_source_filtered = df_source[cols_to_fetch].drop_duplicates(subset=[source_key])
+
+                    # عملية الدمج المباشر (VLOOKUP الفائق)
+                    merged_df = pd.merge(
+                        df_target,
+                        df_source_filtered,
+                        left_on=target_key,
+                        right_on=source_key,
+                        how='left'
+                    )
+
+                    # إذا كان عمود الربط مختلف في الاسم يمسح التكرار
+                    if target_key != source_key and source_key in merged_df.columns:
+                        merged_df.drop(columns=[source_key], inplace=True)
+
+                st.success(f"🎉 تم جلب {len(selected_columns)} أعمدة بنجاح لـ {len(merged_df)} صف!")
+                
+                st.subheader("📋 معاينة النتيجة:")
+                st.dataframe(merged_df.head(20), use_container_width=True)
+
+                # تجهيز شيت Excel للتحميل
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    merged_df.to_excel(writer, index=False, sheet_name='البيانات المدمجة')
+                excel_bytes = output.getvalue()
+
+                st.download_button(
+                    label="📥 تحميل الشيت المدمج (Excel)",
+                    data=excel_bytes,
+                    file_name="vlookup_result.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+    except Exception as e:
+        st.error(f"حدث خطأ أثناء قراءة أو دمج الملفات: {e}")
