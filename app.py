@@ -19,8 +19,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ أداة مطابقة جلب البيانات (الأولوية للأحدث تاريخاً)")
-st.write("جلب البيانات مع تطبيق أولوية التاريخ الأحدث أولاً عبر كل الشيتات المختارة بدون أخطاء تكرار الأعمدة.")
+st.title("⚡ أداة مطابقة جلب البيانات (شاملة وكاملة الخيارات)")
+st.write("جلب البيانات من كافة الشيتات مع التصفية بالأحدث تاريخاً وحرية اختيار جميع الأعمدة.")
 
 st.divider()
 
@@ -36,12 +36,10 @@ with col2:
 
 if target_file and source_file:
     try:
-        with st.spinner("جاري قراءة الملفات وفحص الشيتات..."):
+        with st.spinner("جاري قراءة جميع الشيتات وتجميع كافة الأعمدة..."):
             df_target = pd.read_csv(target_file) if target_file.name.endswith('.csv') else pd.read_excel(target_file)
-            
-            # إزالة أي تكرار في أسماء الأعمدة بالشيت الأساسي
             df_target = df_target.loc[:, ~df_target.columns.duplicated()]
-            
+
             if source_file.name.endswith('.csv'):
                 excel_sheets = {"Sheet1": pd.read_csv(source_file)}
                 sheet_names = ["Sheet1"]
@@ -55,7 +53,7 @@ if target_file and source_file:
         st.subheader("⚙️ إعدادات الشيتات والأولوية والربط")
 
         selected_sheets_order = st.multiselect(
-            "📑 اختر الشيتات المطلوبة ورتبها حسب أولوية الشيتات (تُستخدم للترتيب الثانوي في حال تساوي التواريخ):",
+            "📑 حدد الشيتات المطلوبة ورتبها حسب أولوية الشيتات:",
             options=sheet_names,
             default=sheet_names
         )
@@ -63,9 +61,16 @@ if target_file and source_file:
         if not selected_sheets_order:
             st.warning("⚠️ يرجى اختيار شيت واحد على الأقل من ملف المصدر للبدء.")
         else:
-            # معايرة الأعمدة من أول شيت
-            sample_sheet = excel_sheets["Sheet1"] if source_file.name.endswith('.csv') else pd.read_excel(xls_source, sheet_name=selected_sheets_order[0], nrows=5)
-            sample_sheet = sample_sheet.loc[:, ~sample_sheet.columns.duplicated()]
+            # تجميع أسماء كل الأعمدة بلا استثناء من كل الشيتات المختارة
+            all_source_columns = []
+            for s_name in selected_sheets_order:
+                if source_file.name.endswith('.csv'):
+                    cols = excel_sheets["Sheet1"].columns.tolist()
+                else:
+                    cols = pd.read_excel(xls_source, sheet_name=s_name, nrows=1).columns.tolist()
+                for c in cols:
+                    if c not in all_source_columns:
+                        all_source_columns.append(c)
 
             cfg_col1, cfg_col2 = st.columns(2)
 
@@ -73,28 +78,29 @@ if target_file and source_file:
                 target_key = st.selectbox("اختر عمود البحث (الـ Key/رقم الطلب) في الشيت الأساسي:", df_target.columns)
             
             with cfg_col2:
-                source_key = st.selectbox("اختر عمود البحث (الـ Key/رقم الطلب) في شيت المصدر:", sample_sheet.columns)
+                source_key = st.selectbox("اختر عمود البحث (الـ Key/رقم الطلب) في شيت المصدر:", all_source_columns)
 
             st.markdown("---")
-            st.subheader("📅 اختيار التاريخ كأولوية رئيسية")
+            st.subheader("📅 اختيار عمود التاريخ للمفاضلة")
             
             date_col = st.selectbox(
                 "اختر عمود التاريخ في شيت المصدر (لاختيار البيانات ذات التاريخ الأحدث دائماً):",
-                options=sample_sheet.columns
+                options=all_source_columns
             )
 
-            available_columns = [col for col in sample_sheet.columns if col != source_key and col != date_col]
+            # جعل كافة الأعمدة متاح اختيارها دون استثناء عمود التاريخ
+            available_columns = [col for col in all_source_columns if col != source_key]
+            
             selected_columns = st.multiselect(
-                "📌 اختر الأعمدة المراد جلبها إلى الشيت الأساسي:",
+                "📌 اختر الأعمدة المراد جلبها إلى الشيت الأساسي (يمكنك اختيار عمود التاريخ أيضاً):",
                 options=available_columns,
-                default=available_columns[:1] if available_columns else []
+                default=[]
             )
 
             if selected_columns:
-                if st.button("🚀 تنفيذ عملية الدمج والجلب (حسب التاريخ الأحدث)"):
-                    with st.spinner("جاري دمج البيانات وفرز التاريخ الأحدث عبر الشيتات..."):
+                if st.button("🚀 تنفيذ عملية الدمج والجلب الشامل"):
+                    with st.spinner("جاري معالجة البيانات واستخراجها من كافة الشيتات بالأحدث تاريخاً..."):
                         
-                        # تجميع الشيتات المختارة في DataFrame واحد مع حفظ الترتيب
                         combined_frames = []
                         for rank, sheet_name in enumerate(selected_sheets_order):
                             if source_file.name.endswith('.csv'):
@@ -104,53 +110,64 @@ if target_file and source_file:
 
                             df_s = df_s.loc[:, ~df_s.columns.duplicated()]
 
-                            if source_key in df_s.columns and date_col in df_s.columns:
-                                cols = [source_key, date_col] + [c for c in selected_columns if c in df_s.columns]
-                                df_sub = df_s[cols].copy()
-                                df_sub['__sheet_rank__'] = rank  # حفظ أولوية الشيت
+                            if source_key in df_s.columns:
+                                df_s[source_key] = df_s[source_key].astype(str).str.strip()
+                                
+                                cols_to_read = [source_key]
+                                if date_col in df_s.columns:
+                                    cols_to_read.append(date_col)
+                                for c in selected_columns:
+                                    if c in df_s.columns and c not in cols_to_read:
+                                        cols_to_read.append(c)
+                                        
+                                df_sub = df_s[cols_to_read].copy()
+                                df_sub['__sheet_rank__'] = rank
                                 combined_frames.append(df_sub)
 
                         if not combined_frames:
-                            st.error("لم يتم العثور على الأعمدة المختارة داخل الشيتات المحددة.")
+                            st.error("لم يتم العثور على عمود البحث داخل الشيتات المحددة!")
                         else:
                             all_source_data = pd.concat(combined_frames, ignore_index=True)
 
-                            # تحويل عمود التاريخ إلى صيغة تاريخ حقيقية لضمان الترتيب الصحيح
-                            all_source_data['__parsed_date__'] = pd.to_datetime(all_source_data[date_col], errors='coerce')
+                            # الترتيب أولاً حسب التاريخ الأحدث ثم أولوية الشيت
+                            if date_col in all_source_data.columns:
+                                all_source_data['__parsed_date__'] = pd.to_datetime(all_source_data[date_col], errors='coerce')
+                                all_source_data = all_source_data.sort_values(
+                                    by=['__parsed_date__', '__sheet_rank__'], 
+                                    ascending=[False, True]
+                                )
+                            else:
+                                all_source_data = all_source_data.sort_values(by='__sheet_rank__', ascending=True)
 
-                            # الفرز: أولاً التاريخ الأحدث (ascending=False)، ثانياً أولوية الشيت (ascending=True)
-                            all_source_data = all_source_data.sort_values(
-                                by=['__parsed_date__', '__sheet_rank__'], 
-                                ascending=[False, True]
-                            )
-
-                            # إزالة تكرار رقم الطلب والاحتفاظ بالأحدث تاريخاً
+                            # الاحتفاظ بالظهور الأول (الأحدث تاريخاً)
                             all_source_data = all_source_data.drop_duplicates(subset=[source_key], keep='first')
 
-                            # دمج آمن 100% باستخدام الربط المباشر المعتمد على Map
+                            # دمج البيانات مع الشيت الأساسي
                             final_df = df_target.copy()
+                            target_key_series = final_df[target_key].astype(str).str.strip()
+
                             for col in selected_columns:
                                 if col in all_source_data.columns:
                                     mapping_dict = all_source_data.set_index(source_key)[col].to_dict()
-                                    final_df[col] = final_df[target_key].map(mapping_dict)
+                                    final_df[col] = target_key_series.map(mapping_dict)
 
-                            st.success(f"🎉 تم جلب أحدث البيانات بنجاح لـ {len(final_df)} صف دون أي أخطاء!")
-                            
-                            st.subheader("📋 معاينة النتيجة:")
-                            st.dataframe(final_df.head(20), use_container_width=True)
+                    st.success(f"🎉 تم جلب البيانات بنجاح لـ {len(final_df)} صف!")
+                    
+                    st.subheader("📋 معاينة النتيجة:")
+                    st.dataframe(final_df.head(20), use_container_width=True)
 
-                            # تجهيز ملف Excel للتحميل
-                            output = io.BytesIO()
-                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                                final_df.to_excel(writer, index=False, sheet_name='البيانات المدمجة')
-                            excel_bytes = output.getvalue()
+                    # تجهيز ملف Excel للتحميل
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        final_df.to_excel(writer, index=False, sheet_name='البيانات المدمجة')
+                    excel_bytes = output.getvalue()
 
-                            st.download_button(
-                                label="📥 تحميل الشيت المدمج (Excel)",
-                                data=excel_bytes,
-                                file_name="vlookup_latest_date_result.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
+                    st.download_button(
+                        label="📥 تحميل الشيت المدمج (Excel)",
+                        data=excel_bytes,
+                        file_name="vlookup_complete_result.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
     except Exception as e:
         st.error(f"حدث خطأ أثناء قراءة أو دمج الملفات: {e}")
