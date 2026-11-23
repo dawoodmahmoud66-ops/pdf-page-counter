@@ -26,7 +26,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ⚡ دوال الكاش السريعة لقراءة الملفات الكبيرة مرة واحدة فقط
 @st.cache_data(show_spinner=False)
 def load_target_file(file_bytes, file_name):
     if file_name.lower().endswith('.csv'):
@@ -39,7 +38,6 @@ def load_target_file(file_bytes, file_name):
 
 @st.cache_data(show_spinner=False)
 def get_source_sheets_info(file_bytes, file_name):
-    """استخراج أسماء الشيتات وهيدرات كل شيت بسرعة من الملف"""
     sheets_headers = {}
     if file_name.lower().endswith('.csv'):
         df_head = pd.read_csv(io.BytesIO(file_bytes), nrows=1)
@@ -55,7 +53,6 @@ def get_source_sheets_info(file_bytes, file_name):
 
 @st.cache_data(show_spinner=False)
 def read_specific_sheet(file_bytes, file_name, sheet_name):
-    """قراءة شيت محدد وتخزينه في الكاش لعدم إعادة قراءته عند تغيير الإعدادات"""
     if file_name.lower().endswith('.csv'):
         df = pd.read_csv(io.BytesIO(file_bytes))
     else:
@@ -65,7 +62,6 @@ def read_specific_sheet(file_bytes, file_name, sheet_name):
     return df
 
 def clean_key_series(series):
-    """دالة لقص المسافات وإزالة .0 وتحويل الأرقام لنصوص مطابقة 100%"""
     def clean_val(val):
         if pd.isna(val):
             return ""
@@ -76,10 +72,9 @@ def clean_key_series(series):
         return s
     return series.apply(clean_val)
 
-# 💾 الشريط الجانبي لحفظ واسترجاع الإعدادات المفضلة (Presets)
+# 💾 الشريط الجانبي لحفظ واسترجاع الإعدادات المفضلة
 with st.sidebar:
     st.header("💾 الإعدادات المفضلة (Presets)")
-    st.write("احفظ إعدادات الشيتات والأعمدة كملف لاسترجاعها بضغطة واحدة في المرات القادمة.")
     uploaded_preset = st.file_uploader("📂 استرجاع إعدادات محفوظة (.json):", type=["json"], key="preset_loader")
     preset_data = {}
     if uploaded_preset is not None:
@@ -90,11 +85,11 @@ with st.sidebar:
             st.error("⚠️ ملف الإعدادات غير صالح.")
 
 st.title("⚡ أداة مطابقة جلب البيانات المتعددة (Multi-File Dynamic Lookup)")
-st.write("ارفع ملفاً أو عدة ملفات مصدر، رتب أولوية الشيتات، واجلب البيانات بالأحدث تاريخاً مع تحديد مصدر كل صف بدقة.")
+st.write("ارفع الشيت الأساسي وملفات المصدر في خانات منفصلة لضمان استقرار الرفع، ثم رتب أولوية الشيتات واجلب البيانات بالأحدث.")
 
 st.divider()
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 1.3])
 
 with col1:
     st.subheader("📥 1. الشيت الأساسي (الملف الصغير)")
@@ -105,21 +100,19 @@ with col1:
     )
 
 with col2:
-    st.subheader("📁 2. شيتات المصدر (ملف واحد أو عدة ملفات كبيرة)")
-    source_files = st.file_uploader(
-        "ارفع ملفاً أو أكثر من الملفات التي تحتوي على البيانات الكلية (Excel/CSV):",
-        type=["xlsx", "xls", "csv"],
-        accept_multiple_files=True,
-        key="source"
-    )
+    st.subheader("📁 2. ملفات المصدر (ارفع ملفاً أو أكثر)")
+    source_file_1 = st.file_uploader("📄 ملف المصدر الأول (إلزامي):", type=["xlsx", "xls", "csv"], key="source_1")
+    source_file_2 = st.file_uploader("📄 ملف المصدر الثاني (اختياري - مثل تجميع 2025):", type=["xlsx", "xls", "csv"], key="source_2")
+    source_file_3 = st.file_uploader("📄 ملف المصدر الثالث (اختياري إضافي):", type=["xlsx", "xls", "csv"], key="source_3")
+
+# تجميع الملفات المرفوعة فعلياً فقط
+source_files = [f for f in [source_file_1, source_file_2, source_file_3] if f is not None]
 
 if target_file and source_files:
     try:
-        with st.spinner("⚡ جاري قراءة وتجهيز جميع الملفات والشيتات (مدعوم بالتسريع الذكي)..."):
+        with st.spinner("⚡ جاري قراءة وتجهيز جميع الملفات والشيتات..."):
             df_target = load_target_file(target_file.getvalue(), target_file.name)
 
-            # بناء خريطة موحدة لكل الشيتات عبر كافة الملفات المرفوعة
-            # الصيغة: "[اسم الملف] -> اسم الشيت"
             sheet_registry = {}
             all_sheet_labels = []
 
@@ -142,13 +135,12 @@ if target_file and source_files:
 
         st.subheader("⚙️ إعدادات الشيتات والأولوية والربط")
 
-        # تطبيق الإعدادات المفضلة إن وجدت
         default_sheets = [s for s in preset_data.get("selected_sheets_order", []) if s in all_sheet_labels]
         if not default_sheets:
             default_sheets = all_sheet_labels
 
         selected_sheets_order = st.multiselect(
-            "📑 حدد الشيتات المطلوبة من كافة الملفات ورتبها حسب أولوية البحث (من الأعلى للأقل أولوية):",
+            "📑 حدد الشيتات المطلوبة من كافة الملفات ورتبها حسب أولوية البحث (الأول فالأول):",
             options=all_sheet_labels,
             default=default_sheets
         )
@@ -156,7 +148,6 @@ if target_file and source_files:
         if not selected_sheets_order:
             st.warning("⚠️ يرجى اختيار شيت واحد على الأقل من ملفات المصدر للبدء.")
         else:
-            # تجميع كافة الهيدرات المتاحة ديناميكياً من الشيتات المختارة فقط
             all_source_headers = []
             for label in selected_sheets_order:
                 for c in sheet_registry[label]["headers"]:
@@ -184,7 +175,7 @@ if target_file and source_files:
                 )
 
             st.markdown("---")
-            st.subheader("📅 اختيار عمود التاريخ للمفاضلة بالأحدث (اختياري/إلزامي)")
+            st.subheader("📅 اختيار عمود التاريخ للمفاضلة بالأحدث")
 
             date_options = ["بدون مفاضلة بالتاريخ (الاعتماد على أولوية الشيتات فقط)"] + all_source_headers
             default_date_idx = date_options.index(preset_data["date_col"]) if preset_data.get("date_col") in date_options else (1 if len(date_options) > 1 else 0)
@@ -204,13 +195,11 @@ if target_file and source_files:
                 default=default_selected_cols
             )
 
-            # خيار إضافة عمود يوضح من أي ملف وشيت تم استخراج البيانات
             include_source_tag = st.checkbox(
                 "🏷️ إضافة عمود (مصدر البيانات) يوضح اسم الملف واسم الشيت الذي تم الجلب منه لكل صف",
                 value=preset_data.get("include_source_tag", True)
             )
 
-            # تحديث زر حفظ الإعدادات في الشريط الجانبي
             current_config = {
                 "selected_sheets_order": selected_sheets_order,
                 "target_key": target_key,
@@ -240,7 +229,6 @@ if target_file and source_files:
 
                             if source_key in df_s.columns:
                                 df_s['__clean_key__'] = clean_key_series(df_s[source_key])
-                                # استبعاد المفاتيح الفارغة تماماً
                                 df_s = df_s[df_s['__clean_key__'] != ""]
 
                                 cols_to_read = ['__clean_key__']
@@ -261,7 +249,6 @@ if target_file and source_files:
                         else:
                             all_source_data = pd.concat(combined_frames, ignore_index=True)
 
-                            # الترتيب حسب التاريخ الأحدث أولاً (إن وجد)، ثم حسب أولوية ترتيب الشيتات
                             if use_date and date_col in all_source_data.columns:
                                 all_source_data['__parsed_date__'] = pd.to_datetime(all_source_data[date_col], errors='coerce')
                                 all_source_data = all_source_data.sort_values(
@@ -272,10 +259,8 @@ if target_file and source_files:
                             else:
                                 all_source_data = all_source_data.sort_values(by='__sheet_rank__', ascending=True)
 
-                            # الاحتفاظ بأول ظهور (الأحدث تاريخاً والأعلى أولوية)
                             all_source_data = all_source_data.drop_duplicates(subset=['__clean_key__'], keep='first')
 
-                            # المطابقة والجلب للشيت الأساسي
                             final_df = df_target.copy()
                             clean_target_keys = clean_key_series(final_df[target_key])
 
@@ -284,13 +269,11 @@ if target_file and source_files:
                                     mapping_dict = all_source_data.set_index('__clean_key__')[col].to_dict()
                                     final_df[col] = clean_target_keys.map(mapping_dict)
 
-                            # إضافة عمود مصدر البيانات الدقيق
                             origin_dict = all_source_data.set_index('__clean_key__')['__source_origin__'].to_dict()
                             mapped_origin = clean_target_keys.map(origin_dict).fillna("غير موجود")
                             if include_source_tag:
                                 final_df["مصدر البيانات (الملف -> الشيت)"] = mapped_origin
 
-                    # عرض إحصائيات سريعة
                     matched_count = (mapped_origin != "غير موجود").sum()
                     unmatched_count = (mapped_origin == "غير موجود").sum()
 
